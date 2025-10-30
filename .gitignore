@@ -1,0 +1,9 @@
+# Backend
+node_modules/
+.env
+
+# Flutter frontend
+build/
+.dart_tool/
+.packages
+.idea/

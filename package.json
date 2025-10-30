@@ -1,0 +1,20 @@
+{
+  "name": "auralyn-server",
+  "version": "1.0.0",
+  "description": "Auralyn WhatsApp Integration Server",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.1",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.19.2",
+    "node-fetch": "^3.3.2"
+  }
+}
