@@ -19,7 +19,7 @@ mongoose
 
 // ===== User Schema =====
 const userSchema = new mongoose.Schema({
-  userId: String, // Your Flutter app user ID
+  userId: { type: String, required: true, unique: true },
   accessToken: String,
   phoneNumberId: String,
   wabaId: String,
@@ -47,41 +47,104 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// ===== Webhook for Receiving Messages =====
-app.post("/webhook", (req, res) => {
-  console.log("📩 Incoming WhatsApp message:", JSON.stringify(req.body, null, 2));
-  res.sendStatus(200);
-});
-
-// ===== Connect WhatsApp for a User =====
-app.post("/connect-whatsapp", async (req, res) => {
+// ===== Webhook to receive messages =====
+app.post("/webhook", async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    // Normally OAuth flow here; using permanent token
-    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.PHONE_NUMBER_ID;
-    const wabaId = process.env.WABA_ID;
-
-    // Save or update user in MongoDB
-    const user = await User.findOneAndUpdate(
-      { userId },
-      { accessToken, phoneNumberId, wabaId, connectedAt: new Date() },
-      { upsert: true, new: true }
-    );
-
-    res.json({ success: true, message: "WhatsApp connected", user });
+    console.log("📩 Incoming WhatsApp message:", JSON.stringify(req.body, null, 2));
+    res.sendStatus(200);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: "Failed to connect WhatsApp" });
+    console.error("❌ Webhook error:", err);
+    res.sendStatus(500);
   }
 });
 
-// ===== Send WhatsApp Message =====
+// ===================================================================
+// 🧠 STEP 1: Start OAuth Login for a user
+// ===================================================================
+app.get("/auth/login", (req, res) => {
+  const { userId } = req.query;
+
+  if (!userId) {
+    return res.status(400).send("Missing userId");
+  }
+
+  const redirectUri = encodeURIComponent(process.env.META_REDIRECT_URI);
+  const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${process.env.META_APP_ID}&redirect_uri=${redirectUri}&state=${userId}&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
+
+  console.log("🔗 Redirecting user to Meta OAuth:", authUrl);
+  res.redirect(authUrl);
+});
+
+// ===================================================================
+// 🧠 STEP 2: Meta redirects back to this route with a code
+// ===================================================================
+app.get("/auth/callback", async (req, res) => {
+  const { code, state } = req.query; // state = userId
+  if (!code || !state) {
+    return res.status(400).send("Missing code or state");
+  }
+
+  try {
+    // Exchange code for access token
+    const tokenResponse = await axios.get(
+      `https://graph.facebook.com/v20.0/oauth/access_token?client_id=${process.env.META_APP_ID}&client_secret=${process.env.META_APP_SECRET}&redirect_uri=${process.env.META_REDIRECT_URI}&code=${code}`
+    );
+
+    const accessToken = tokenResponse.data.access_token;
+
+    // Fetch business accounts
+    const businessResponse = await axios.get(
+      `https://graph.facebook.com/v20.0/me?fields=id,name,accounts&access_token=${accessToken}`
+    );
+
+    const wabaId = businessResponse.data.id;
+
+    // You might need to manually assign your phone_number_id if not accessible here
+    const phoneNumberId = process.env.PHONE_NUMBER_ID || "YOUR_PHONE_NUMBER_ID";
+
+    // Save to database
+    await User.findOneAndUpdate(
+      { userId: state },
+      {
+        accessToken,
+        wabaId,
+        phoneNumberId,
+        connectedAt: new Date(),
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`✅ User ${state} connected successfully`);
+    res.send(`
+      <h2>✅ WhatsApp connected successfully!</h2>
+      <p>You can now close this tab and return to the Auralyn app.</p>
+    `);
+  } catch (err) {
+    console.error("❌ OAuth callback error:", err.response?.data || err.message);
+    res.status(500).send("OAuth callback failed.");
+  }
+});
+
+// ===================================================================
+// ✅ STEP 3: Check user connection status
+// ===================================================================
+app.get("/user-status/:userId", async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const user = await User.findOne({ userId });
+    res.json({ connected: user?.accessToken ? true : false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ connected: false });
+  }
+});
+
+// ===================================================================
+// ✅ STEP 4: Send WhatsApp message (per-user access)
+// ===================================================================
 app.post("/send", async (req, res) => {
   try {
     const { userId, to, message } = req.body;
-
     const user = await User.findOne({ userId });
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -108,6 +171,8 @@ app.post("/send", async (req, res) => {
   }
 });
 
-// ===== Start Server =====
+// ===================================================================
+// 🚀 Start Server
+// ===================================================================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
