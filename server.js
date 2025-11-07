@@ -1,3 +1,4 @@
+//most latest needed
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -28,16 +29,6 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
-// ===== Message Schema =====
-const messageSchema = new mongoose.Schema({
-  userId: String,      // Your app user ID
-  from: String,        // Customer's number
-  message: String,
-  timestamp: Date,
-});
-
-const Message = mongoose.model("Message", messageSchema);
-
 // ===== Root Route =====
 app.get("/", (req, res) => {
   res.send("🚀 Auralyn WhatsApp API Server Running");
@@ -60,30 +51,7 @@ app.get("/webhook", (req, res) => {
 // ===== Webhook to receive messages =====
 app.post("/webhook", async (req, res) => {
   try {
-    const entries = req.body.entry || [];
-    for (const entry of entries) {
-      const changes = entry.changes || [];
-      for (const change of changes) {
-        const messages = change.value.messages || [];
-        const phoneNumberId = change.value.metadata.phone_number_id;
-
-        // Find user by phoneNumberId
-        const user = await User.findOne({ phoneNumberId });
-        if (!user) continue; // Skip if no user found
-
-        for (const msg of messages) {
-          const newMessage = new Message({
-            userId: user.userId,
-            from: msg.from,
-            message: msg.text?.body || "",
-            timestamp: new Date(Number(msg.timestamp) * 1000),
-          });
-          await newMessage.save();
-          console.log(`📩 Saved message from ${msg.from} for user ${user.userId}`);
-        }
-      }
-    }
-
+    console.log("📩 Incoming WhatsApp message:", JSON.stringify(req.body, null, 2));
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ Webhook error:", err);
@@ -201,20 +169,6 @@ app.post("/send", async (req, res) => {
   } catch (err) {
     console.error("❌ Send error:", err.response?.data || err);
     res.status(500).json({ error: "Failed to send message" });
-  }
-});
-
-// ===================================================================
-// ✅ STEP 5: Fetch messages for a user
-// ===================================================================
-app.get("/messages/:userId", async (req, res) => {
-  const { userId } = req.params;
-  try {
-    const messages = await Message.find({ userId }).sort({ timestamp: 1 });
-    res.json(messages);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
 
