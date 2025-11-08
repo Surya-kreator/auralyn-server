@@ -1,3 +1,4 @@
+//most latest needed
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -41,6 +42,16 @@ const User = mongoose.model("User", userSchema);
 // ===== Root Route =====
 app.get("/", (req, res) => {
   res.send("🚀 Auralyn WhatsApp API Server Running");
+});
+
+app.get("/messages/:phoneNumberId", async (req, res) => {
+  try {
+    const { phoneNumberId } = req.params;
+    const messages = await Message.find({ phoneNumberId }).sort({ timestamp: -1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
 });
 
 // ===== Webhook Verification =====
@@ -93,16 +104,16 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ===== API to fetch messages =====
-app.get("/messages/:phoneNumberId", async (req, res) => {
-  try {
-    const { phoneNumberId } = req.params;
-    const messages = await Message.find({ phoneNumberId }).sort({ timestamp: -1 });
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch messages" });
-  }
-});
+// // ===== API to fetch messages =====
+// app.get("/messages/:phoneNumberId", async (req, res) => {
+//   try {
+//     const { phoneNumberId } = req.params;
+//     const messages = await Message.find({ phoneNumberId }).sort({ timestamp: -1 });
+//     res.json(messages);
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to fetch messages" });
+//   }
+// });
 
 // ===================================================================
 // 🧠 STEP 1: Start OAuth Login for a user
