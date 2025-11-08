@@ -11,6 +11,16 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+const messageSchema = new mongoose.Schema({
+  phoneNumberId: String,
+  from: String,
+  text: String,
+  timestamp: String,
+});
+
+const Message = mongoose.model("Message", messageSchema);
+
+
 // ===== MongoDB Connection =====
 mongoose
   .connect(process.env.MONGO_URI)
@@ -27,16 +37,6 @@ const userSchema = new mongoose.Schema({
 });
 
 const User = mongoose.model("User", userSchema);
-
-// ===== Message Schema =====
-const messageSchema = new mongoose.Schema({
-  userId: String,
-  from: String,
-  message: String,
-  timestamp: Date,
-});
-
-const Message = mongoose.model("Message", messageSchema);
 
 // ===== Root Route =====
 app.get("/", (req, res) => {
@@ -58,34 +58,49 @@ app.get("/webhook", (req, res) => {
 });
 
 // ===== Webhook to receive messages =====
+// app.post("/webhook", async (req, res) => {
+//   try {
+//     console.log("📩 Incoming WhatsApp message:", JSON.stringify(req.body, null, 2));
+//     res.sendStatus(200);
+//   } catch (err) {
+//     console.error("❌ Webhook error:", err);
+//     res.sendStatus(500);
+//   }
+// });
 app.post("/webhook", async (req, res) => {
   try {
-    const entries = req.body.entry || [];
-    for (const entry of entries) {
-      const changes = entry.changes || [];
-      for (const change of changes) {
-        const messages = change.value.messages || [];
-        const phoneNumberId = change.value.metadata.phone_number_id;
+    const body = req.body;
+    console.log("📩 Incoming:", JSON.stringify(body, null, 2));
 
-        // Find user by phoneNumberId
-        const user = await User.findOne({ phoneNumberId });
-        if (!user) continue;
+    if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
+      const message = body.entry[0].changes[0].value.messages[0];
+      const metadata = body.entry[0].changes[0].value.metadata;
 
-        for (const msg of messages) {
-          const newMessage = new Message({
-            userId: user.userId,
-            from: msg.from,
-            message: msg.text?.body || "",
-            timestamp: new Date(Number(msg.timestamp) * 1000),
-          });
-          await newMessage.save();
-        }
-      }
+      await Message.create({
+        phoneNumberId: metadata.phone_number_id,
+        from: message.from,
+        text: message.text?.body || "",
+        timestamp: message.timestamp,
+      });
+
+      console.log("✅ Message saved to DB");
     }
+
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ Webhook error:", err);
     res.sendStatus(500);
+  }
+});
+
+// ===== API to fetch messages =====
+app.get("/messages/:phoneNumberId", async (req, res) => {
+  try {
+    const { phoneNumberId } = req.params;
+    const messages = await Message.find({ phoneNumberId }).sort({ timestamp: -1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
 
@@ -95,7 +110,9 @@ app.post("/webhook", async (req, res) => {
 app.get("/auth/login", (req, res) => {
   const { userId } = req.query;
 
-  if (!userId) return res.status(400).send("Missing userId");
+  if (!userId) {
+    return res.status(400).send("Missing userId");
+  }
 
   const redirectUri = encodeURIComponent(process.env.META_REDIRECT_URI);
   const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${process.env.META_APP_ID}&redirect_uri=${redirectUri}&state=${userId}&scope=whatsapp_business_management,whatsapp_business_messaging,business_management`;
@@ -105,29 +122,41 @@ app.get("/auth/login", (req, res) => {
 });
 
 // ===================================================================
-// 🧠 STEP 2: OAuth callback
+// 🧠 STEP 2: Meta redirects back to this route with a code
 // ===================================================================
 app.get("/auth/callback", async (req, res) => {
   const { code, state } = req.query; // state = userId
-  if (!code || !state) return res.status(400).send("Missing code or state");
+  if (!code || !state) {
+    return res.status(400).send("Missing code or state");
+  }
 
   try {
+    // Exchange code for access token
     const tokenResponse = await axios.get(
       `https://graph.facebook.com/v20.0/oauth/access_token?client_id=${process.env.META_APP_ID}&client_secret=${process.env.META_APP_SECRET}&redirect_uri=${process.env.META_REDIRECT_URI}&code=${code}`
     );
 
     const accessToken = tokenResponse.data.access_token;
 
+    // Fetch business accounts
     const businessResponse = await axios.get(
       `https://graph.facebook.com/v20.0/me?fields=id,name,accounts&access_token=${accessToken}`
     );
 
     const wabaId = businessResponse.data.id;
+
+    // You might need to manually assign your phone_number_id if not accessible here
     const phoneNumberId = process.env.PHONE_NUMBER_ID || "YOUR_PHONE_NUMBER_ID";
 
+    // Save to database
     await User.findOneAndUpdate(
       { userId: state },
-      { accessToken, wabaId, phoneNumberId, connectedAt: new Date() },
+      {
+        accessToken,
+        wabaId,
+        phoneNumberId,
+        connectedAt: new Date(),
+      },
       { upsert: true, new: true }
     );
 
@@ -167,28 +196,24 @@ app.post("/send", async (req, res) => {
 
     const response = await axios.post(
       `https://graph.facebook.com/v20.0/${user.phoneNumberId}/messages`,
-      { messaging_product: "whatsapp", to, type: "text", text: { body: message } },
-      { headers: { Authorization: `Bearer ${user.accessToken}`, "Content-Type": "application/json" } }
+      {
+        messaging_product: "whatsapp",
+        to,
+        type: "text",
+        text: { body: message },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${user.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
 
     res.json({ success: true, data: response.data });
   } catch (err) {
     console.error("❌ Send error:", err.response?.data || err);
     res.status(500).json({ error: "Failed to send message" });
-  }
-});
-
-// ===================================================================
-// ✅ STEP 5: Fetch messages for a user
-// ===================================================================
-app.get("/messages/:userId", async (req, res) => {
-  const { userId } = req.params;
-  try {
-    const messages = await Message.find({ userId }).sort({ timestamp: 1 });
-    res.json(messages);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
 
