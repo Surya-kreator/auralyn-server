@@ -44,15 +44,6 @@ app.get("/", (req, res) => {
   res.send("🚀 Auralyn WhatsApp API Server Running");
 });
 
-app.get("/messages/:phoneNumberId", async (req, res) => {
-  try {
-    const { phoneNumberId } = req.params;
-    const messages = await Message.find({ phoneNumberId }).sort({ timestamp: -1 });
-    res.json(messages);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch messages" });
-  }
-});
 
 // ===== Webhook Verification =====
 app.get("/webhook", (req, res) => {
@@ -68,16 +59,17 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// ===== Webhook to receive messages =====
-// app.post("/webhook", async (req, res) => {
-//   try {
-//     console.log("📩 Incoming WhatsApp message:", JSON.stringify(req.body, null, 2));
-//     res.sendStatus(200);
-//   } catch (err) {
-//     console.error("❌ Webhook error:", err);
-//     res.sendStatus(500);
-//   }
-// });
+app.get("/messages/:phoneNumberId", async (req, res) => {
+  try {
+    const { phoneNumberId } = req.params;
+    const messages = await Message.find({ phoneNumberId }).sort({ timestamp: -1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body;
