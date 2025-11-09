@@ -73,14 +73,26 @@ app.post("/webhook", async (req, res) => {
 });
 
 // Fetch messages by phoneNumberId
-app.get("/messages/:phoneNumberId", async (req, res) => {
+// app.get("/messages/:phoneNumberId", async (req, res) => {
+//   try {
+//     const messages = await Message.find({ phoneNumberId: req.params.phoneNumberId }).sort({ timestamp: -1 });
+//     res.json(messages);
+//   } catch (err) {
+//     res.status(500).json({ error: "Failed to fetch messages" });
+//   }
+// });
+app.get('/messages/:phoneNumberId', async (req, res) => {
   try {
-    const messages = await Message.find({ phoneNumberId: req.params.phoneNumberId }).sort({ timestamp: -1 });
+    const phoneNumberId = req.params.phoneNumberId;
+    const messages = await Message.find({ phoneNumberId });
+    console.log('Fetched messages:', messages);
     res.json(messages);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch messages" });
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
+
 
 // OAuth login
 app.get("/auth/login", (req, res) => {
