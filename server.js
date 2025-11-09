@@ -173,24 +173,45 @@ app.get("/user-status/:userId", async (req, res) => {
 });
 
 // Send WhatsApp message
+// app.post("/send", async (req, res) => {
+//   try {
+//     const { userId, to, message } = req.body;
+//     const user = await User.findOne({ userId });
+//     if (!user) return res.status(404).json({ error: "User not found" });
+
+//     const response = await axios.post(
+//       `https://graph.facebook.com/v20.0/${user.phoneNumberId}/messages`,
+//       { messaging_product: "whatsapp", to, type: "text", text: { body: message } },
+//       { headers: { Authorization: `Bearer ${user.accessToken}`, "Content-Type": "application/json" } }
+//     );
+
+//     res.json({ success: true, data: response.data });
+//   } catch (err) {
+//     console.error("❌ Send error:", err.response?.data || err);
+//     res.status(500).json({ error: "Failed to send message" });
+//   }
+// });
 app.post("/send", async (req, res) => {
-  try {
-    const { userId, to, message } = req.body;
-    const user = await User.findOne({ userId });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const response = await axios.post(
-      `https://graph.facebook.com/v20.0/${user.phoneNumberId}/messages`,
-      { messaging_product: "whatsapp", to, type: "text", text: { body: message } },
-      { headers: { Authorization: `Bearer ${user.accessToken}`, "Content-Type": "application/json" } }
-    );
-
-    res.json({ success: true, data: response.data });
-  } catch (err) {
-    console.error("❌ Send error:", err.response?.data || err);
-    res.status(500).json({ error: "Failed to send message" });
-  }
+  const { userId, to, message } = req.body;
+  const user = await User.findOne({ userId });
+  
+  await axios.post(
+    `https://graph.facebook.com/v20.0/${user.phoneNumberId}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: message },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${user.accessToken}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
 });
+
 
 // Start Server
 const PORT = process.env.PORT || 5000;
