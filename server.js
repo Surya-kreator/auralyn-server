@@ -50,10 +50,33 @@ app.get("/webhook", (req, res) => {
 });
 
 // Webhook to receive messages
+// app.post("/webhook", async (req, res) => {
+//   try {
+//     const body = req.body;
+//     if (body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+//       const message = body.entry[0].changes[0].value.messages[0];
+//       const metadata = body.entry[0].changes[0].value.metadata;
+
+//       await Message.create({
+//         phoneNumberId: metadata.phone_number_id,
+//         from: message.from,
+//         text: message.text?.body || "",
+//         timestamp: message.timestamp,
+//       });
+//       console.log("✅ Message saved to DB");
+//     }
+//     res.sendStatus(200);
+//   } catch (err) {
+//     console.error("❌ Webhook error:", err);
+//     res.sendStatus(500);
+//   }
+// });
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body;
-    if (body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]) {
+    console.log("📩 Incoming:", JSON.stringify(body, null, 2));
+
+    if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages) {
       const message = body.entry[0].changes[0].value.messages[0];
       const metadata = body.entry[0].changes[0].value.metadata;
 
@@ -63,14 +86,17 @@ app.post("/webhook", async (req, res) => {
         text: message.text?.body || "",
         timestamp: message.timestamp,
       });
+
       console.log("✅ Message saved to DB");
     }
+
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ Webhook error:", err);
     res.sendStatus(500);
   }
 });
+
 
 // Fetch messages by phoneNumberId
 // app.get("/messages/:phoneNumberId", async (req, res) => {
